@@ -70,6 +70,12 @@ load32:
     mov ss, ax
     mov ebp, 0x00200000
     mov esp, ebp
+
+    ; Enabling A20 line
+    in al, 0x92 ;  reading from the processor bus
+    or al, 2
+    out 0x92, al ;  writing into processor bus
+    
     jmp $   ; now that at this point we are in protected mode, reading from disk would require creating a driver
 
 times 510-($ - $$) db 0 ; setting boot signature
