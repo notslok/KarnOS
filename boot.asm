@@ -1,5 +1,9 @@
-ORG 0 ; offset...in boot process BIOS loads bootloader in this location 
+ORG 0x7c00 ; offset...in boot process BIOS loads bootloader in this location 
 BITS 16 ; telling assembler to assemble only 16 bit codes(architecture)
+
+CODE_SEG equ gdt_code - gdt_start
+DATA_SEG equ gdt_data - gdt_start
+
 _start:
     jmp short start
     nop
@@ -7,54 +11,66 @@ _start:
 times 33 db 0
 
 start:
-    jmp 0x7c0:step2; setting code segment to 0x7c0
+    jmp 0:step2; setting code segment to 0x7c0
 
 step2:    
     cli ; clear interrupts
-    mov ax, 0x7c0
+    mov ax, 0x00
     mov ds, ax
     mov es, ax
-    mov ax, 0x00
     mov ss, ax  ; setting stack segment
     mov sp, 0x7c00 ; setting stack pointer
     sti ; enables interrupts
 
-    mov ah, 2 ; Read sector command
-    mov al, 1 ; One sector to read from
-    mov ch, 0 ; Cylinder lower 8 bits -> using CHS here
-    mov cl, 2 ; Read sector 2
-    mov dh, 0 ; Head number
-    mov bx, buffer
-    int 0x13
-    jc error ; if carray flag(returned by interrupt 0x13) is set -> jump to error label below 
+.load_protected:
+    cli ; clear interrupts
+    lgdt[gdt_descriptor]    ; load GDT
+    mov eax, cr0
+    or eax, 0x1
+    mov cr0, eax    ; entering protected mode by setting control register
+    jmp CODE_SEG:load32
 
-    mov si, buffer ; after reading from disk is done and written in buffer label, move the read data to si register
-    call print ; print the content of si register
-    
-    jmp $
+; GDT -> Global Descriptor table for protected mode
+gdt_start:
+gdt_null:
+    dd 0x0
+    dd 0x0
 
-error:
-    mov si, error_message ; get the error message
-    call print ;  call the routine to print error message stored in si register
-    jmp $
+; offset 0x8
+gdt_code:     ; CS(Code Segment) should point to this 
+    dw 0xffff ; Segment limit first 0-15 bits
+    dw 0      ; Base first 0-15 bits  
+    db 0      ; Base 16-23 bits
+    db 0x9a   ; Acess byte
+    db 11001111b ; HIgh 4 bit flags and low 4 bit flags
+    db 0      ; Base 24-31
 
-print:
-    mov bx, 0
-.loop:    
-    lodsb
-    cmp al, 0
-    je .done
-    call print_char
-    jmp .loop
-.done:
-    ret
+; offset 0x10
+gdt_data:     ; DS, SS, ES, FS, GS
+    dw 0xffff ; Segment limit first 0-15 bits
+    dw 0      ; Base first 0-15 bits  
+    db 0      ; Base 16-23 bits
+    db 0x9a   ; Acess byte
+    db 11001111b ; HIgh 4 bit flags and low 4 bit flags
+    db 0      ; Base 24-31
 
-print_char:
-    mov ah, 0eh
-    int 0x10    ; calling bios interrupt
-    ret
+gdt_end:
 
-error_message: db 'Failed to load sector!', 0
+gdt_descriptor:
+    dw gdt_end- gdt_start-1 ; size of GDT(  Global Descriptor Table)
+    dd gdt_start    ; offset of GDT
+
+[BITS 32]   ; all code under this is treated as 32 bit
+load32:
+    mov ax, DATA_SEG    ; like int "step2:" level which was initialising registers in real mode...here we do the same for protected mode
+    mov ds, ax
+    mov es, ax
+    mov fs, ax
+    mov gs, ax
+    mov ss, ax
+    mov ebp, 0x00200000
+    mov esp, ebp
+    jmp $   ; now that at this point we are in protected mode, reading from disk would require creating a driver
 
 times 510-($ - $$) db 0 ; setting boot signature
 dw 0xAA55
