@@ -28,7 +28,8 @@ step2:
     mov eax, cr0
     or eax, 0x1
     mov cr0, eax    ; entering protected mode by setting control register
-    jmp CODE_SEG:load32
+    ; jmp CODE_SEG:load32 -> no longer valid as 32 bit kernel code will be loaded in the sector right next to the first one(where bootloader will be present)
+    jmp $
 
 ; GDT -> Global Descriptor table for protected mode
 gdt_start:
@@ -60,23 +61,7 @@ gdt_descriptor:
     dw gdt_end- gdt_start-1 ; size of GDT(  Global Descriptor Table)
     dd gdt_start    ; offset of GDT
 
-[BITS 32]   ; all code under this is treated as 32 bit
-load32:
-    mov ax, DATA_SEG    ; like int "step2:" level which was initialising registers in real mode...here we do the same for protected mode
-    mov ds, ax
-    mov es, ax
-    mov fs, ax
-    mov gs, ax
-    mov ss, ax
-    mov ebp, 0x00200000
-    mov esp, ebp
-
-    ; Enabling A20 line
-    in al, 0x92 ;  reading from the processor bus
-    or al, 2
-    out 0x92, al ;  writing into processor bus
-    
-    jmp $   ; now that at this point we are in protected mode, reading from disk would require creating a driver
+; sepearated 32 bit kernel code from here
 
 times 510-($ - $$) db 0 ; setting boot signature
 dw 0xAA55
