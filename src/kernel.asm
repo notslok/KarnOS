@@ -1,4 +1,5 @@
 [BITS 32]   ; all code under this is treated as 32 bit
+
 global _start ; exporting _start label
 
 CODE_SEG equ 0x08
@@ -20,3 +21,5 @@ _start:
     out 0x92, al ;  writing into processor bus
     
     jmp $   ; now that at this point we are in protected mode, reading from disk would require creating a driver
+
+times 512-($ - $$) db 0 ; for aligment of asm code with 16 bit clang code
