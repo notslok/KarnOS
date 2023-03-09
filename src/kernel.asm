@@ -1,8 +1,10 @@
 [BITS 32]   ; all code under this is treated as 32 bit
+global _start ; exporting _start label
+
 CODE_SEG equ 0x08
 DATA_SEG equ 0x10
 
-load32:
+_start:
     mov ax, DATA_SEG    ; like int "step2:" level which was initialising registers in real mode...here we do the same for protected mode
     mov ds, ax
     mov es, ax

@@ -28,8 +28,7 @@ step2:
     mov eax, cr0
     or eax, 0x1
     mov cr0, eax    ; entering protected mode by setting control register
-    ; jmp CODE_SEG:load32 -> no longer valid as 32 bit kernel code will be loaded in the sector right next to the first one(where bootloader will be present)
-    jmp $
+    jmp CODE_SEG:load32 
 
 ; GDT -> Global Descriptor table for protected mode
 gdt_start:
@@ -62,9 +61,73 @@ gdt_descriptor:
     dd gdt_start    ; offset of GDT
 
 ; sepearated 32 bit kernel code from here
+[BITS 32]
+load32:
+    mov eax, 1  ;starting sector to load from (LBA -> Logical Bloack Address)
+    mov ecx, 100 ; total no. of sector we want to load
+    mov edi, 0x0100000 ; location where we want to load
+    call ata_lba_read ; calling driver to read data from the disk
+    jmp CODE_SEG:0x100000
+
+ata_lba_read:
+    mov ebx, eax ; Backup the LBA(Logical Block Address)
+    
+    ; Send highest 8 bits of LBA to hard disk controller
+    shr eax, 24   ; (sh)IFT (r)IGHT by 24 bits (-> LBA's value)
+    or eax, 0xE0  ; or Select the master drive
+    mov dx, 0x1F6 ; loading address of CPU's I/O port bus in dx
+    out dx, al    ; Transferring data from al register to I/O bus
+    ; Finished sending the highest 8 bits of the LDA
+
+    ; Send the total sectors to read
+    mov eax, ecx  ; eax <- ecx(=100)
+    mov dx, 0x1F2 ; storing port number of another I/O bus
+    out dx, al    ; Transferring data from al register to I/O bus
+    ; Finished reading total number of sectors to read  
+
+    ; Send more bits of the LBA
+    mov eax, ebx ; Restore the backup LBA
+    mov dx, 0x1F3
+    out dx, al
+    ; Finished sending more bits of the LBA
+
+    ; Send more bits of the LBA
+    mov dx, 0x1F4
+    mov eax, ebx ; Restore and backup LBA
+    shr eax, 8
+    out dx, al
+    ; Finished sending more bits of LBA
+
+    ; Send upper 16 bits of the LBA
+    mov dx, 0x1F5
+    mov eax, ebx
+    shr eax, 16
+    out dx, al
+    ; Finished sending upper 16 bits of the LBA
+
+    mov dx, 0x1f7
+    mov al, 0x20
+    out dx, al
+
+; Read all sectors into memory
+.next_sector:
+    push ecx
+
+; Checking if we need to read
+.try_again:
+    mov dx, 0x1f7
+    in al, dx
+    test al, 8
+    jz .try_again
+
+; We need to read 256 words at a time
+    mov ecx, 256    ; loading another sector in ecx
+    mov dx, 0x1F0
+    rep insw  ; INSW -> Input word from I/O port specified in DX into memory location specified in ES:(E)DI
+    pop ecx
+    loop .next_sector
+    ; End of reading sectors into memory
+    ret
 
 times 510-($ - $$) db 0 ; setting boot signature
 dw 0xAA55
-
-buffer: ; label where we write data read from the disk
-
